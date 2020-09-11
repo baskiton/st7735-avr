@@ -18,8 +18,8 @@ typedef struct {
 
 typedef struct {
     int16_t hue;
-    int8_t sat;
-    int8_t val;
+    uint8_t sat;
+    uint8_t val;
 } color_hsv;
 
 extern color_rgb hsv_to_rgb(uint16_t hue, uint8_t sat, uint8_t val);
@@ -29,11 +29,14 @@ extern color_rgb hsv_to_rgb(uint16_t hue, uint8_t sat, uint8_t val);
  * color_666 - RGB to 666 (18bit color, 24bit data)
  */
 
-#define color_565(red, green, blue) ((((red) & 0xF8) << 8) | (((green) & 0xFC) << 3) | ((blue) >> 3))
-#define color_666(red, green, blue) ((((red) & 0xFC) << 16) | (((green) & 0xFC) << 8) | ((blue) & 0xFC))
+#define color_565(red, green, blue) ((((red) & 0xF8U) << 8U) | (((green) & 0xFCU) << 3U) | ((blue) >> 3U))
+#define color_666(red, green, blue) ((((red) & 0xFCU) << 16U) | (((green) & 0xFCU) << 8U) | ((blue) & 0xFCU))
 
 #define TFT_WIDTH 128
-#define TFT_HEIGTH 160
+#define TFT_HEIGHT 160
+
+#define TFT_WRITE_FREQ 15151515U
+#define TFT_READ_FREQ   6666666U
 
 /* System function Command List
  *     Undefined commands are treated as NOP (00 h) command.
@@ -124,22 +127,26 @@ volatile uint8_t* tft_port;
 #define tft_command_mode() (bit_clear(*tft_port, tft_a0))
 
 
-extern void ST7735_init(int8_t cs, int8_t a0, int8_t rst, volatile uint8_t *port);
+extern void ST7735_init(uint8_t cs, uint8_t a0, uint8_t rst, volatile uint8_t *port);
 
 extern void ST7735_invert_display(bool val);
 extern void ST7735_idle_mode(bool val);
 extern uint32_t ST7735_read_info(uint8_t cmd);
+extern uint8_t ST7735_read8(uint8_t cmd);
 extern void ST7735_fill_screen(uint16_t rgb565);
 extern void ST7735_draw_HSV(void);
 
-extern void ST7735_draw_pixel(uint8_t x, uint8_t y, uint16_t color);
-extern void ST7735_draw_line(uint8_t x0, uint8_t y0, uint8_t x1, uint8_t y1, uint16_t color);
-extern void ST7735_draw_Hline(uint8_t x, uint8_t y, uint8_t w, uint16_t color);
-extern void ST7735_draw_Vline(uint8_t x, uint8_t y, uint8_t h, uint16_t color);
-extern void ST7735_draw_circle_Bres(uint8_t x0, uint8_t y0, uint8_t radius, uint16_t color);
-extern void ST7735_draw_circle_Mich(uint8_t x0, uint8_t y0, uint8_t radius, uint16_t color);
-extern void ST7735_draw_rect(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint16_t color);
-extern void ST7735_draw_fill_rect(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint16_t color);
-extern void ST7735_draw_triangle(uint8_t x0, uint8_t y0, uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint16_t color);
+extern void ST7735_draw_pixel(int16_t x, int16_t y, uint16_t color);
+extern void ST7735_draw_line(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color);
+extern void ST7735_draw_Hline(int16_t x, int16_t y, int16_t w, uint16_t color);
+extern void ST7735_draw_Vline(int16_t x, int16_t y, int16_t h, uint16_t color);
+extern void ST7735_draw_circle_Bres(int16_t x0, int16_t y0, int16_t radius, uint16_t color);
+extern void ST7735_draw_circle_Mich(int16_t x0, int16_t y0, int16_t radius, uint16_t color);
+extern void ST7735_draw_fill_circle_Bres(int16_t x0, int16_t y0, int16_t radius, uint16_t color);
+extern void ST7735_draw_fill_circle_Mich(int16_t x0, int16_t y0, int16_t radius, uint16_t color);
+extern void ST7735_draw_rect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color);
+extern void ST7735_draw_fill_rect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color);
+extern void ST7735_draw_triangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2, int16_t y2, uint16_t color);
+extern void ST7735_draw_fill_triangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2, int16_t y2, uint16_t color);
 
 #endif  /* !ST7735_H */

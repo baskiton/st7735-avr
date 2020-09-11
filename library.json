@@ -21,7 +21,7 @@
     "frameworks": ["arduino"],
     "platforms": ["atmelavr"],
     "dependencies": {
-        "defines": ">=1.0.0",
-        "spi": ">=1.0.0"
+        "defines": "^1.0.0",
+        "spi": "^1.1.0"
     }
 }
