@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <math.h>
 
 #include <defines.h>
@@ -11,6 +12,7 @@
 
 #include "ST7735.h"
 
+static FILE st7735_stream = FDEV_SETUP_STREAM(ST7735_putchar, NULL, _FDEV_SETUP_WRITE);
 
 /*!
  * @brief Convert HSV-color to RGB
@@ -980,3 +982,21 @@ void ST7735_draw_fill_triangle(int16_t a_x, int16_t a_y,
 
     tft_desel();
 }
+
+/*!
+ * @brief Send one character to the screen.
+ * @param c Sending char
+ * @param stream Stream to sending
+ */
+int ST7735_putchar(char c, FILE *stream) {
+    /* implementing here */
+    return 0;
+}
+
+/*!
+ * @brief Set ST7735 as stdio
+ */
+void ST7735_set_stdout(void) {
+    stdout = &st7735_stream;
+}
+

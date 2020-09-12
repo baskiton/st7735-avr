@@ -129,6 +129,9 @@ volatile uint8_t* tft_port;
 
 extern void ST7735_init(uint8_t cs, uint8_t a0, uint8_t rst, volatile uint8_t *port);
 
+extern int ST7735_putchar(char c, FILE *stream);
+extern void ST7735_set_stdout(void);
+
 extern void ST7735_invert_display(bool val);
 extern void ST7735_idle_mode(bool val);
 extern uint32_t ST7735_read_info(uint8_t cmd);
