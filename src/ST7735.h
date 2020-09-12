@@ -5,6 +5,7 @@
 #ifndef ST7735_H
 #define ST7735_H
 
+#include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
 
