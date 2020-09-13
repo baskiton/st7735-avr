@@ -115,6 +115,21 @@ uint8_t tft_a0;
 uint8_t tft_rst;
 volatile uint8_t* tft_port;
 
+#define TFT_CURSOR_MAX_C 21     // max column
+#define TFT_CURSOR_MAX_R 20     // max row
+uint16_t tft_cursor;     // current cursor position
+int16_t tft_cursor_x; // top-left corner x-coord of cursor in pixels
+int16_t tft_cursor_y; // top-left corner y-coord of cursor in pixels
+uint16_t tft_text_color;
+uint16_t tft_text_bg_color;
+uint8_t flags;
+
+/* If true, the characters will be printed without a pad.
+   Else characters will be printed on the selected background color. */
+#define TFT_TRANSP_TEXT 1
+#define TFT_WRAP_TEXT 2     // wrap text
+#define TFT_PIX_TEXT 4      // custom pixels position of text
+
 /* Select Display */
 #define tft_sel() (bit_clear(*tft_port, tft_cs))
 
@@ -129,9 +144,6 @@ volatile uint8_t* tft_port;
 
 
 extern void ST7735_init(uint8_t cs, uint8_t a0, uint8_t rst, volatile uint8_t *port);
-
-extern int ST7735_putchar(char c, FILE *stream);
-extern void ST7735_set_stdout(void);
 
 extern void ST7735_invert_display(bool val);
 extern void ST7735_idle_mode(bool val);
@@ -152,5 +164,21 @@ extern void ST7735_draw_rect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_
 extern void ST7735_draw_fill_rect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color);
 extern void ST7735_draw_triangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2, int16_t y2, uint16_t color);
 extern void ST7735_draw_fill_triangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2, int16_t y2, uint16_t color);
+
+extern int ST7735_put_char(char c, FILE *stream);
+extern int ST7735_put_symbol(uint8_t sym, FILE *stream);
+extern void ST7735_set_stdout(char cs);
+
+extern void ST7735_set_cursor(uint8_t columnm uint8_t row);
+extern uint16_t ST7735_get_cursor(void);
+extern void ST7735_set_cursor_pix(int16_t x, int16_t y);
+extern int16_t ST7735_get_cursor_x(void);
+extern int16_t ST7735_get_cursor_y(void);
+
+extern void ST7735_set_text_color(uint16_t color);
+extern void ST7735_set_text_bg_color(uint16_t color);
+extern void ST7735_transp_text(bool mode);
+extern void ST7735_wrap_text(bool mode);
+extern void ST7735_pix_text(bool mode);
 
 #endif  /* !ST7735_H */

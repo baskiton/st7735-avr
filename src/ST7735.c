@@ -11,8 +11,9 @@
 #include <spi.h>
 
 #include "ST7735.h"
+#include "font.h"
 
-static FILE st7735_stream = FDEV_SETUP_STREAM(ST7735_putchar, NULL, _FDEV_SETUP_WRITE);
+static FILE st7735_stream;
 
 /*!
  * @brief Convert HSV-color to RGB
@@ -405,6 +406,12 @@ void ST7735_init(uint8_t cs, uint8_t a0, uint8_t rst, volatile uint8_t *port) {
     _delay_ms(20);
     bit_set(*port, rst);
     _delay_ms(150);
+    
+    tft_cursor = 0;
+    tft_cursor_x = tft_cursor_y = 0;
+    tft_text_color = 0xFF;
+    tft_text_bg_color = 0x00;
+    flags = 0;
 
     /*
     Set SPI speed for this display. Write speed by default
@@ -988,15 +995,184 @@ void ST7735_draw_fill_triangle(int16_t a_x, int16_t a_y,
  * @param c Sending char
  * @param stream Stream to sending
  */
-int ST7735_putchar(char c, FILE *stream) {
-    /* implementing here */
+int ST7735_put_char(char c, FILE *stream) {
+    if ((c == 0x2C) || (c == 0x5F) || (c == 0x7C) ||
+        ((c >= 0x80) && (c <= 0xDF))) {
+        ST7735_put_symbol((uint8_t)c, stream);
+    }
+    
+    uint8_t tmp_ch = 0;
+    
+    if (!(flag & _BV(TFT_TRANSP_TEXT)))
+        set_addr_window(tft_cursor_x, tft_cursor_y,
+                        FONT_5X7_WIDTH + 1, FONT_5X7_HEIGHT + 1);
+    
+    for (uint8_t row = 0; row <= FONT_5X7_HEIGHT; row++) {
+        tmp_ch = pgm_read_byte(font5x7_cp437[c][row]);
+        for (uint8_t i = 0; i <= FONT_5X7_WIDTH; i++) {
+            if ((flag & _BV(TFT_TRANSP_TEXT)) && (tmp_ch & _BV(i))) {
+                write_pixel(tft_cursor_x + i,
+                            tft_cursor_y + row,
+                            tft_text_color);
+            } else if (!(flag & _BV(TFT_TRANSP_TEXT))) {
+                if (tmp_ch & _BV(i))
+                    spi_write16(tft_text_color);
+                else
+                    spi_write16(tft_text_bg_color);
+            }
+        }
+    }
+    
+    (flags & _BV(TFT_PIX_TEXT)) ? cursor_pix_upd(1) : cursor_upd(1);
+    
+    return 0;
+}
+
+/*!
+ * @brief Send one symbol to the screen.
+ * @param sym Sending symbol
+ * @param stream Stream to sending
+ */
+int ST7735_put_symbol(uint8_t sym, FILE *stream) {
+    uint8_t tmp_ch = 0;
+    
+    if (!(flag & _BV(TFT_TRANSP_TEXT)))
+        set_addr_window(tft_cursor_x, tft_cursor_y,
+                        FONT_5X7_WIDTH + 1, FONT_5X7_HEIGHT + 1);
+    
+    for (uint8_t row = 0; row <= FONT_5X7_HEIGHT; row++) {
+        tmp_ch = pgm_read_byte(font5x7_cp437[sym][row]);
+        for (uint8_t i = 0; i <= FONT_5X7_WIDTH; i++) {
+            if ((flag & _BV(TFT_TRANSP_TEXT)) && (tmp_ch & _BV(i))) {
+                write_pixel(tft_cursor_x + i,
+                            tft_cursor_y + row,
+                            tft_text_color);
+            } else if (!(flag & _BV(TFT_TRANSP_TEXT))) {
+                if (tmp_ch & _BV(i))
+                    spi_write16(tft_text_color);
+                else
+                    spi_write16(tft_text_bg_color);
+            }
+        }
+    }
+    
+    (flags & _BV(TFT_PIX_TEXT)) ? cursor_pix_upd(1) : cursor_upd(1);
+    
     return 0;
 }
 
 /*!
  * @brief Set ST7735 as stdio
+ * @param cs 'c' for chars; 's' for symbols
  */
-void ST7735_set_stdout(void) {
+void ST7735_set_stdout(char cs) {
+    if (cs == 'c')   // if CHARS to out
+        st7735_stream = FDEV_SETUP_STREAM(ST7735_put_char, NULL, _FDEV_SETUP_WRITE);
+    else if (cs == 's')  // if SYMBOLS to out
+        st7735_stream = FDEV_SETUP_STREAM(ST7735_put_symbol, NULL, _FDEV_SETUP_WRITE);
+    
     stdout = &st7735_stream;
+}
+
+/*!
+ * 
+ */
+void ST7735_set_cursor(uint8_t columnm, uint8_t row) {
+    tft_cursor = TFT_CURSOR_MAX_C * row + column;
+    
+    tft_cursor_x = columnm * (FONT_5X7_WIDTH + 1);  // +1 is blank line
+    tft_cursor_y = row * (FONT_5X7_HEIGHT + 1);     // +1 is blank line
+}
+
+/*!
+ *
+ */
+uint16_t ST7735_get_cursor(void) {
+    return tft_cursor;
+}
+
+/*!
+ * 
+ */
+void ST7735_set_cursor_pix(int16_t x, int16_t y) {
+    tft_cursor_x = x;
+    tft_cursor_y = y;
+}
+
+/*!
+ *
+ */
+int16_t ST7735_get_cursor_x(void) {
+    return tft_cursor_x;
+}
+
+/*!
+ *
+ */
+int16_t ST7735_get_cursor_y(void) {
+    return tft_cursor_y;
+}
+
+/*!
+ * @param sign 1 - increment; -1 - decrement; else just update
+ */
+static void cursor_upd(int8_t sign) {
+    if (sign == 1 &&
+        (((tft_cursor % TFT_CURSOR_MAX_C) < (TFT_CURSOR_MAX_C - 1)) ||
+         tft_wrap_mode)) {
+        tft_cursor++;
+    }
+    else if (sign == -1 &&
+             (((tft_cursor % TFT_CURSOR_MAX_C) > 0) ||
+              tft_wrap_mode))
+        tft_cursor--;
+    
+    tft_cursor_x = (tft_cursor % TFT_CURSOR_MAX_C) * (FONT_5X7_WIDTH + 1);
+    tft_cursor_y = (tft_cursor / TFT_CURSOR_MAX_R) * (FONT_5X7_HEIGHT + 1);
+}
+
+/*!
+ * @param sign 1 - increment; -1 - decrement
+ */
+static void cursor_pix_upd(int8_t sign) {
+    if (sign == 1)
+        tft_cursor_x += FONT_5X7_WIDTH + 1;
+    else if (sign == -1)
+        tft_cursor_x -= (FONT_5X7_WIDTH + 1);
+}
+
+/*!
+ * @param color 16-bit RGB565 color
+ */
+void ST7735_set_text_color(uint16_t color) {
+    tft_text_color = color;
+}
+
+/*!
+ * @param color 16-bit RGB565 color
+ */
+void ST7735_set_text_bg_color(uint16_t color) {
+    tft_text_bg_color = color;
+}
+
+/*!
+ * 
+ */
+void ST7735_transp_text(bool mode) {
+    bit_write(flags, TFT_TRANSP_TEXT, mode);
+}
+
+/*!
+ * 
+ */
+void ST7735_wrap_text(bool mode) {
+    bit_write(flags, TFT_WRAP_TEXT, mode);
+}
+
+/*!
+ * 
+ */
+void ST7735_pix_text(bool mode) {
+    bit_write(flags, TFT_PIX_TEXT, mode);
 }
 
