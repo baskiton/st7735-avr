@@ -13,8 +13,6 @@
 #include "ST7735.h"
 #include "font.h"
 
-static FILE st7735_stream;
-
 /*!
  * @brief Convert HSV-color to RGB
  * @param hue Hue [0:360]
@@ -340,6 +338,24 @@ static inline void write_fill_circle(int16_t x_0, int16_t y_0,
 }
 
 /*!
+ * @param num if >0 - increment; if <0 - decrement
+ */
+static void cursor_upd(int8_t num) {
+    if (flags & _BV(TFT_PIX_TEXT)) {
+        tft_cursor_x += num * (FONT_5X7_WIDTH + 1);
+        return;
+    }
+    if (((tft_cursor % TFT_CURSOR_MAX_C) < (TFT_CURSOR_MAX_C - 1)) ||
+         (flags & _BV(TFT_WRAP_TEXT))) {
+        tft_cursor += num;
+    }
+
+    tft_cursor_x = (tft_cursor % TFT_CURSOR_MAX_C) * (FONT_5X7_WIDTH + 1);
+    tft_cursor_y = (tft_cursor / TFT_CURSOR_MAX_C) * (FONT_5X7_HEIGHT + 1);
+}
+
+
+/*!
  * @brief Read 32-bit data from display. !!!Does not work correctly at the moment!!!
  * @param cmd RDDID or RDDST
  * @return 32-bit receive data
@@ -412,6 +428,8 @@ void ST7735_init(uint8_t cs, uint8_t a0, uint8_t rst, volatile uint8_t *port) {
     tft_text_color = 0xFF;
     tft_text_bg_color = 0x00;
     flags = 0;
+
+    fdev_setup_stream(&st7735_stream, ST7735_put_char, NULL, _FDEV_SETUP_WRITE);
 
     /*
     Set SPI speed for this display. Write speed by default
@@ -819,7 +837,7 @@ void ST7735_draw_fill_rect(int16_t x, int16_t y,
         h += y;
         y = 0;
     }
-    if ((x >= TFT_WIDTH) || (y >= TFT_HEIGHT) || !(x + w) || !(y + h))
+    if ((x >= TFT_WIDTH) || (y >= TFT_HEIGHT) || ((x + w) < 0) || ((y + h) < 0))
         return;
     if ((x + w) >= TFT_WIDTH)
         w = TFT_WIDTH - x;
@@ -991,157 +1009,50 @@ void ST7735_draw_fill_triangle(int16_t a_x, int16_t a_y,
 }
 
 /*!
- * @brief Send one character to the screen.
- * @param c Sending char
- * @param stream Stream to sending
+ * @brief Set the cursor position by \p x & \p y coordinates
+ * @param x Horizontal cursor position (pix if pixel mode; column else)
+ * @param y Vertical cursor position (pix if pixel mode; column else)
  */
-int ST7735_put_char(char c, FILE *stream) {
-    if ((c == 0x2C) || (c == 0x5F) || (c == 0x7C) ||
-        ((c >= 0x80) && (c <= 0xDF))) {
-        ST7735_put_symbol((uint8_t)c, stream);
+void ST7735_set_cursor(int16_t x, int16_t y) {
+    if (flags & _BV(TFT_PIX_TEXT)) {
+        /* if pixel mode */
+        tft_cursor_x = x;
+        tft_cursor_y = y;
+    } else {
+        /* if char-pos mode */
+        tft_cursor = TFT_CURSOR_MAX_C * y + x;
+        
+        tft_cursor_x = x * (FONT_5X7_WIDTH + 1);  // +1 is blank line
+        tft_cursor_y = y * (FONT_5X7_HEIGHT + 1);     // +1 is blank line
     }
-    
-    uint8_t tmp_ch = 0;
-    
-    if (!(flag & _BV(TFT_TRANSP_TEXT)))
-        set_addr_window(tft_cursor_x, tft_cursor_y,
-                        FONT_5X7_WIDTH + 1, FONT_5X7_HEIGHT + 1);
-    
-    for (uint8_t row = 0; row <= FONT_5X7_HEIGHT; row++) {
-        tmp_ch = pgm_read_byte(font5x7_cp437[c][row]);
-        for (uint8_t i = 0; i <= FONT_5X7_WIDTH; i++) {
-            if ((flag & _BV(TFT_TRANSP_TEXT)) && (tmp_ch & _BV(i))) {
-                write_pixel(tft_cursor_x + i,
-                            tft_cursor_y + row,
-                            tft_text_color);
-            } else if (!(flag & _BV(TFT_TRANSP_TEXT))) {
-                if (tmp_ch & _BV(i))
-                    spi_write16(tft_text_color);
-                else
-                    spi_write16(tft_text_bg_color);
-            }
-        }
-    }
-    
-    (flags & _BV(TFT_PIX_TEXT)) ? cursor_pix_upd(1) : cursor_upd(1);
-    
-    return 0;
 }
 
 /*!
- * @brief Send one symbol to the screen.
- * @param sym Sending symbol
- * @param stream Stream to sending
+ * @brief Get the cursor position
+ * @return Cursor position in number of chars
  */
-int ST7735_put_symbol(uint8_t sym, FILE *stream) {
-    uint8_t tmp_ch = 0;
-    
-    if (!(flag & _BV(TFT_TRANSP_TEXT)))
-        set_addr_window(tft_cursor_x, tft_cursor_y,
-                        FONT_5X7_WIDTH + 1, FONT_5X7_HEIGHT + 1);
-    
-    for (uint8_t row = 0; row <= FONT_5X7_HEIGHT; row++) {
-        tmp_ch = pgm_read_byte(font5x7_cp437[sym][row]);
-        for (uint8_t i = 0; i <= FONT_5X7_WIDTH; i++) {
-            if ((flag & _BV(TFT_TRANSP_TEXT)) && (tmp_ch & _BV(i))) {
-                write_pixel(tft_cursor_x + i,
-                            tft_cursor_y + row,
-                            tft_text_color);
-            } else if (!(flag & _BV(TFT_TRANSP_TEXT))) {
-                if (tmp_ch & _BV(i))
-                    spi_write16(tft_text_color);
-                else
-                    spi_write16(tft_text_bg_color);
-            }
-        }
-    }
-    
-    (flags & _BV(TFT_PIX_TEXT)) ? cursor_pix_upd(1) : cursor_upd(1);
-    
-    return 0;
-}
-
-/*!
- * @brief Set ST7735 as stdio
- * @param cs 'c' for chars; 's' for symbols
- */
-void ST7735_set_stdout(char cs) {
-    if (cs == 'c')   // if CHARS to out
-        st7735_stream = FDEV_SETUP_STREAM(ST7735_put_char, NULL, _FDEV_SETUP_WRITE);
-    else if (cs == 's')  // if SYMBOLS to out
-        st7735_stream = FDEV_SETUP_STREAM(ST7735_put_symbol, NULL, _FDEV_SETUP_WRITE);
-    
-    stdout = &st7735_stream;
-}
-
-/*!
- * 
- */
-void ST7735_set_cursor(uint8_t columnm, uint8_t row) {
-    tft_cursor = TFT_CURSOR_MAX_C * row + column;
-    
-    tft_cursor_x = columnm * (FONT_5X7_WIDTH + 1);  // +1 is blank line
-    tft_cursor_y = row * (FONT_5X7_HEIGHT + 1);     // +1 is blank line
-}
-
-/*!
- *
- */
-uint16_t ST7735_get_cursor(void) {
+int16_t ST7735_get_cursor(void) {
     return tft_cursor;
 }
 
 /*!
- * 
- */
-void ST7735_set_cursor_pix(int16_t x, int16_t y) {
-    tft_cursor_x = x;
-    tft_cursor_y = y;
-}
-
-/*!
- *
+ * @brief Get X-coord of the cursor position in pix
+ * @return X-coordinate of cursor
  */
 int16_t ST7735_get_cursor_x(void) {
     return tft_cursor_x;
 }
 
 /*!
- *
+ * @brief Get Y-coord of the cursor position in pix
+ * @return Y-coordinate of cursor
  */
 int16_t ST7735_get_cursor_y(void) {
     return tft_cursor_y;
 }
 
 /*!
- * @param sign 1 - increment; -1 - decrement; else just update
- */
-static void cursor_upd(int8_t sign) {
-    if (sign == 1 &&
-        (((tft_cursor % TFT_CURSOR_MAX_C) < (TFT_CURSOR_MAX_C - 1)) ||
-         tft_wrap_mode)) {
-        tft_cursor++;
-    }
-    else if (sign == -1 &&
-             (((tft_cursor % TFT_CURSOR_MAX_C) > 0) ||
-              tft_wrap_mode))
-        tft_cursor--;
-    
-    tft_cursor_x = (tft_cursor % TFT_CURSOR_MAX_C) * (FONT_5X7_WIDTH + 1);
-    tft_cursor_y = (tft_cursor / TFT_CURSOR_MAX_R) * (FONT_5X7_HEIGHT + 1);
-}
-
-/*!
- * @param sign 1 - increment; -1 - decrement
- */
-static void cursor_pix_upd(int8_t sign) {
-    if (sign == 1)
-        tft_cursor_x += FONT_5X7_WIDTH + 1;
-    else if (sign == -1)
-        tft_cursor_x -= (FONT_5X7_WIDTH + 1);
-}
-
-/*!
+ * @brief Set the text color
  * @param color 16-bit RGB565 color
  */
 void ST7735_set_text_color(uint16_t color) {
@@ -1149,6 +1060,7 @@ void ST7735_set_text_color(uint16_t color) {
 }
 
 /*!
+ * @brief Set the background color of the text pad.
  * @param color 16-bit RGB565 color
  */
 void ST7735_set_text_bg_color(uint16_t color) {
@@ -1156,23 +1068,179 @@ void ST7735_set_text_bg_color(uint16_t color) {
 }
 
 /*!
- * 
+ * @brief Set transparent mode of text
+ * @param mode If \c true, the characters will be printed
+ * without a pad (transparent). Else characters will be printed
+ * on the selected background color.
  */
 void ST7735_transp_text(bool mode) {
     bit_write(flags, TFT_TRANSP_TEXT, mode);
 }
 
 /*!
- * 
+ * @brief Set text wrap
+ * @param mode \c true or \c false
  */
 void ST7735_wrap_text(bool mode) {
     bit_write(flags, TFT_WRAP_TEXT, mode);
 }
 
 /*!
- * 
+ * @brief Set custom text position
+ * @param mode \c true or \c false
  */
 void ST7735_pix_text(bool mode) {
     bit_write(flags, TFT_PIX_TEXT, mode);
 }
 
+/*!
+ * @brief Set printing mode (symbols by CP437 or char by ASCII)
+ * @param mode \c true for symbols or \c false for chars
+ */
+void ST7735_symbol_text(bool mode) {
+    bit_write(flags, TFT_SYM_TEXT, mode);
+}
+
+/*!
+ * @brief Send one character to the screen.
+ * @param c Sending char
+ * @param stream Stream to sending
+ */
+int ST7735_put_char(char c, FILE *stream) {
+    if ((tft_cursor_x >= TFT_WIDTH) ||
+        (tft_cursor_y >= TFT_HEIGHT) ||
+        ((tft_cursor_x + FONT_5X7_WIDTH + 1) < 0) ||
+        ((tft_cursor_y + FONT_5X7_HEIGHT + 1) < 0)) {
+        /* checking if the given character is printed
+           outside the screen boundaries */
+        cursor_upd(1);
+        
+        return 0;
+    }
+    
+    if (!(flags & _BV(TFT_SYM_TEXT))) {
+        uint8_t tmp_val;
+        switch (c) {
+            case 0x00:  // ^@ \0 NULL
+                return 0;
+            case 0x01:  // ^A
+            case 0x02:  // ^B
+            case 0x03:  // ^C
+            case 0x04:  // ^D
+            case 0x05:  // ^E
+            case 0x06:  // ^F
+            case 0x07:  // ^G \a
+                break;
+            case 0x08:  // ^H \b BackSpase
+                if (stream->buf[stream->len] == '\t')
+                    cursor_upd(-4);
+                else
+                    cursor_upd(-1);
+                return 0;
+            case 0x09:  // ^I \t TAB
+                tmp_val = (tft_cursor % TFT_CURSOR_MAX_C) + 1;  // curr column
+                if ((tmp_val / 4) < 5)
+                    cursor_upd(4 - (tmp_val % 4));
+                return 0;
+            case 0x0A:  // ^J \n New Line
+                tmp_val = (tft_cursor % TFT_CURSOR_MAX_C) + 1;  // curr column
+                cursor_upd(TFT_CURSOR_MAX_C - (tmp_val % TFT_CURSOR_MAX_C) + 1);
+                return 0;
+            case 0x0B:  // ^K \v
+            case 0x0C:  // ^L \f
+                break;
+            case 0x0D:  // ^M \r Carriage Return
+                return 0;
+            case 0x0E:  // ^N
+            case 0x0F:  // ^O
+            case 0x10:  // ^P
+            case 0x11:  // ^Q
+            case 0x12:  // ^R
+            case 0x13:  // ^S
+            case 0x14:  // ^T
+            case 0x15:  // ^U
+            case 0x16:  // ^V
+            case 0x17:  // ^W
+            case 0x18:  // ^X
+            case 0x19:  // ^Y
+            case 0x1A:  // ^Z
+            case 0x1B:  // ^[ \e ESCAPE
+            case 0x1C:  /* ^\ */
+            case 0x1D:  // ^]
+            case 0x1E:  // ^^
+            case 0x1F:  // ^_
+            case 0x7F:  // ^?
+                break;
+            
+            default:
+                break;
+        }
+    }
+    
+    uint8_t tmp_ch;
+    
+    tft_sel();
+    
+    if (!(flags & _BV(TFT_TRANSP_TEXT))) {
+        /* if transparency is off, check and restrict
+           the address window for the symbol */
+        int16_t tmp_x = tft_cursor_x;
+        int16_t tmp_y = tft_cursor_y;
+        uint8_t tmp_w = FONT_5X7_WIDTH + 1;
+        uint8_t tmp_h = FONT_5X7_HEIGHT + 1;
+
+        if (tmp_x < 0) {
+            tmp_w = (uint8_t)(tmp_w + tmp_x);
+            tmp_x = 0;
+        }
+        if (tmp_y < 0) {
+            tmp_h = (uint8_t)(tmp_h + tmp_y);
+            tmp_y = 0;
+        }
+        if ((tmp_x + tmp_w) >= TFT_WIDTH)
+            tmp_w = (uint8_t)(TFT_WIDTH - tmp_x);
+        if ((tmp_y + tmp_h) >= TFT_HEIGHT)
+            tmp_h = (uint8_t)(TFT_HEIGHT - tmp_y);
+
+        set_addr_window(tmp_x, tmp_y,
+                        tmp_w, tmp_h);
+    }
+
+    for (uint8_t row = 0; row <= FONT_5X7_HEIGHT; row++) {
+        tmp_ch = pgm_read_byte(&font5x7_cp437[(uint8_t)c][row]);
+        for (uint8_t i = 0; i <= FONT_5X7_WIDTH; i++) {
+            if (((tft_cursor_x + i) < 0) || ((tft_cursor_x + i) >= TFT_WIDTH) ||
+                ((tft_cursor_y + row) < 0) || ((tft_cursor_y + row) >= TFT_HEIGHT)) {
+                /* skip if the pixel is outside the screen */
+                continue;
+                }
+            if (flags & _BV(TFT_TRANSP_TEXT)) {
+                /* if transparent mode on */
+                if (tmp_ch & _BV(i)) {
+                    write_pixel(tft_cursor_x + i,
+                                tft_cursor_y + row,
+                                tft_text_color);
+                }
+            } else {
+                /* if transparent mode off */
+                if (tmp_ch & _BV(i))
+                    spi_write16_precheck(tft_text_color);
+                else
+                    spi_write16_precheck(tft_text_bg_color);
+            }
+        }
+    }
+    
+    tft_desel();
+    cursor_upd(1);
+    
+    return 0;
+}
+
+/*!
+ * @brief Set ST7735 as std out
+ */
+void ST7735_set_stdout() {
+    fdev_setup_stream(&st7735_stream, ST7735_put_char, NULL, _FDEV_SETUP_WRITE);
+    stdout = &st7735_stream;
+}

@@ -115,20 +115,21 @@ uint8_t tft_a0;
 uint8_t tft_rst;
 volatile uint8_t* tft_port;
 
-#define TFT_CURSOR_MAX_C 21     // max column
-#define TFT_CURSOR_MAX_R 20     // max row
-uint16_t tft_cursor;     // current cursor position
+#define TFT_CURSOR_MAX_C 21     // max columns
+#define TFT_CURSOR_MAX_R 20     // max rows
+int16_t tft_cursor;     // current cursor position
 int16_t tft_cursor_x; // top-left corner x-coord of cursor in pixels
 int16_t tft_cursor_y; // top-left corner y-coord of cursor in pixels
 uint16_t tft_text_color;
 uint16_t tft_text_bg_color;
 uint8_t flags;
 
-/* If true, the characters will be printed without a pad.
-   Else characters will be printed on the selected background color. */
-#define TFT_TRANSP_TEXT 1
-#define TFT_WRAP_TEXT 2     // wrap text
-#define TFT_PIX_TEXT 4      // custom pixels position of text
+FILE st7735_stream;
+
+#define TFT_TRANSP_TEXT 1U  // transparent pad
+#define TFT_WRAP_TEXT 2U    // wrap text
+#define TFT_PIX_TEXT 3U     // custom pixels position of text
+#define TFT_SYM_TEXT 4U     // symbols or char printed
 
 /* Select Display */
 #define tft_sel() (bit_clear(*tft_port, tft_cs))
@@ -147,8 +148,8 @@ extern void ST7735_init(uint8_t cs, uint8_t a0, uint8_t rst, volatile uint8_t *p
 
 extern void ST7735_invert_display(bool val);
 extern void ST7735_idle_mode(bool val);
-extern uint32_t ST7735_read_info(uint8_t cmd);
-extern uint8_t ST7735_read8(uint8_t cmd);
+// extern uint32_t ST7735_read_info(uint8_t cmd);
+// extern uint8_t ST7735_read8(uint8_t cmd);
 extern void ST7735_fill_screen(uint16_t rgb565);
 extern void ST7735_draw_HSV(void);
 
@@ -165,13 +166,8 @@ extern void ST7735_draw_fill_rect(int16_t x, int16_t y, int16_t w, int16_t h, ui
 extern void ST7735_draw_triangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2, int16_t y2, uint16_t color);
 extern void ST7735_draw_fill_triangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2, int16_t y2, uint16_t color);
 
-extern int ST7735_put_char(char c, FILE *stream);
-extern int ST7735_put_symbol(uint8_t sym, FILE *stream);
-extern void ST7735_set_stdout(char cs);
-
-extern void ST7735_set_cursor(uint8_t columnm uint8_t row);
-extern uint16_t ST7735_get_cursor(void);
-extern void ST7735_set_cursor_pix(int16_t x, int16_t y);
+extern void ST7735_set_cursor(int16_t x, int16_t y);
+extern int16_t ST7735_get_cursor(void);
 extern int16_t ST7735_get_cursor_x(void);
 extern int16_t ST7735_get_cursor_y(void);
 
@@ -180,5 +176,9 @@ extern void ST7735_set_text_bg_color(uint16_t color);
 extern void ST7735_transp_text(bool mode);
 extern void ST7735_wrap_text(bool mode);
 extern void ST7735_pix_text(bool mode);
+extern void ST7735_symbol_text(bool mode);
+
+extern int ST7735_put_char(char c, FILE *stream);
+extern void ST7735_set_stdout();
 
 #endif  /* !ST7735_H */

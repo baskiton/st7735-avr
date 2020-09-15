@@ -51,4 +51,10 @@ int main(void) {
     /* draw a YELLOW circles with Michener's algorithm */
     for (int8_t i = 40; i > 0; i -= 2)
         ST7735_draw_circle_Mich(64, 80, i, color_565(255, 255, 85));
+    
+    /* draw 4 filled circles */
+    ST7735_draw_fill_circle_Mich(20, 20, 10, color_565(168, 168, 0));
+    ST7735_draw_fill_circle_Mich(107, 20, 10, color_565(0, 0, 168));
+    ST7735_draw_fill_circle_Mich(107, 139, 10, color_565(168, 0, 168));
+    ST7735_draw_fill_circle_Mich(20, 139, 10, color_565(168, 0, 0));
 }
