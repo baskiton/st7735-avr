@@ -13,6 +13,18 @@
 #include "ST7735.h"
 #include "font.h"
 
+static uint8_t tft_cs;      // tft select pin number
+static uint8_t tft_a0;      // tft command/data pin number
+static uint8_t tft_rst;     // tft reset pin number
+static volatile uint8_t* tft_port;  // tft port address
+
+static int16_t tft_cursor;     // current cursor position
+static int16_t tft_cursor_x; // top-left corner x-coord of cursor in pixels
+static int16_t tft_cursor_y; // top-left corner y-coord of cursor in pixels
+static uint16_t tft_text_color;     // text color
+static uint16_t tft_text_bg_color;  // background color
+static uint8_t tft_flags;
+
 /*!
  * @brief Convert HSV-color to RGB
  * @param hue Hue [0:360]
@@ -341,12 +353,12 @@ static inline void write_fill_circle(int16_t x_0, int16_t y_0,
  * @param num if >0 - increment; if <0 - decrement
  */
 static void cursor_upd(int8_t num) {
-    if (flags & _BV(TFT_PIX_TEXT)) {
+    if (tft_flags & _BV(TFT_PIX_TEXT)) {
         tft_cursor_x += num * (FONT_5X7_WIDTH + 1);
         return;
     }
     if (((tft_cursor % TFT_CURSOR_MAX_C) < (TFT_CURSOR_MAX_C - 1)) ||
-         (flags & _BV(TFT_WRAP_TEXT))) {
+         (tft_flags & _BV(TFT_WRAP_TEXT))) {
         tft_cursor += num;
     }
 
@@ -427,7 +439,7 @@ void ST7735_init(uint8_t cs, uint8_t a0, uint8_t rst, volatile uint8_t *port) {
     tft_cursor_x = tft_cursor_y = 0;
     tft_text_color = 0xFF;
     tft_text_bg_color = 0x00;
-    flags = 0;
+    tft_flags = 0;
 
     fdev_setup_stream(&st7735_stream, ST7735_put_char, NULL, _FDEV_SETUP_WRITE);
 
@@ -1014,7 +1026,7 @@ void ST7735_draw_fill_triangle(int16_t a_x, int16_t a_y,
  * @param y Vertical cursor position (pix if pixel mode; column else)
  */
 void ST7735_set_cursor(int16_t x, int16_t y) {
-    if (flags & _BV(TFT_PIX_TEXT)) {
+    if (tft_flags & _BV(TFT_PIX_TEXT)) {
         /* if pixel mode */
         tft_cursor_x = x;
         tft_cursor_y = y;
@@ -1074,7 +1086,7 @@ void ST7735_set_text_bg_color(uint16_t color) {
  * on the selected background color.
  */
 void ST7735_transp_text(bool mode) {
-    bit_write(flags, TFT_TRANSP_TEXT, mode);
+    bit_write(tft_flags, TFT_TRANSP_TEXT, mode);
 }
 
 /*!
@@ -1082,7 +1094,7 @@ void ST7735_transp_text(bool mode) {
  * @param mode \c true or \c false
  */
 void ST7735_wrap_text(bool mode) {
-    bit_write(flags, TFT_WRAP_TEXT, mode);
+    bit_write(tft_flags, TFT_WRAP_TEXT, mode);
 }
 
 /*!
@@ -1090,7 +1102,7 @@ void ST7735_wrap_text(bool mode) {
  * @param mode \c true or \c false
  */
 void ST7735_pix_text(bool mode) {
-    bit_write(flags, TFT_PIX_TEXT, mode);
+    bit_write(tft_flags, TFT_PIX_TEXT, mode);
 }
 
 /*!
@@ -1098,7 +1110,7 @@ void ST7735_pix_text(bool mode) {
  * @param mode \c true for symbols or \c false for chars
  */
 void ST7735_symbol_text(bool mode) {
-    bit_write(flags, TFT_SYM_TEXT, mode);
+    bit_write(tft_flags, TFT_SYM_TEXT, mode);
 }
 
 /*!
@@ -1118,7 +1130,7 @@ int ST7735_put_char(char c, FILE *stream) {
         return 0;
     }
     
-    if (!(flags & _BV(TFT_SYM_TEXT))) {
+    if (!(tft_flags & _BV(TFT_SYM_TEXT))) {
         uint8_t tmp_val;
         switch (c) {
             case 0x00:  // ^@ \0 NULL
@@ -1181,7 +1193,7 @@ int ST7735_put_char(char c, FILE *stream) {
     
     tft_sel();
     
-    if (!(flags & _BV(TFT_TRANSP_TEXT))) {
+    if (!(tft_flags & _BV(TFT_TRANSP_TEXT))) {
         /* if transparency is off, check and restrict
            the address window for the symbol */
         int16_t tmp_x = tft_cursor_x;
@@ -1214,7 +1226,7 @@ int ST7735_put_char(char c, FILE *stream) {
                 /* skip if the pixel is outside the screen */
                 continue;
                 }
-            if (flags & _BV(TFT_TRANSP_TEXT)) {
+            if (tft_flags & _BV(TFT_TRANSP_TEXT)) {
                 /* if transparent mode on */
                 if (tmp_ch & _BV(i)) {
                     write_pixel(tft_cursor_x + i,

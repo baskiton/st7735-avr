@@ -25,6 +25,8 @@ typedef struct {
 
 extern color_rgb hsv_to_rgb(uint16_t hue, uint8_t sat, uint8_t val);
 
+FILE st7735_stream;
+
 /* Convert color:
  * color_565 - RGB to 565 (16bit color, 16bit data)
  * color_666 - RGB to 666 (18bit color, 24bit data)
@@ -109,23 +111,10 @@ extern color_rgb hsv_to_rgb(uint16_t hue, uint8_t sat, uint8_t val);
 #define ST7735_EXTCTRL      0xF0    // Extension Command Control
 #define ST7735_VCOM4L       0xFF    // Vcom 4 Level control
 
-
-uint8_t tft_cs;
-uint8_t tft_a0;
-uint8_t tft_rst;
-volatile uint8_t* tft_port;
-
 #define TFT_CURSOR_MAX_C 21     // max columns
 #define TFT_CURSOR_MAX_R 20     // max rows
-int16_t tft_cursor;     // current cursor position
-int16_t tft_cursor_x; // top-left corner x-coord of cursor in pixels
-int16_t tft_cursor_y; // top-left corner y-coord of cursor in pixels
-uint16_t tft_text_color;
-uint16_t tft_text_bg_color;
-uint8_t flags;
 
-FILE st7735_stream;
-
+/* flags */
 #define TFT_TRANSP_TEXT 1U  // transparent pad
 #define TFT_WRAP_TEXT 2U    // wrap text
 #define TFT_PIX_TEXT 3U     // custom pixels position of text
