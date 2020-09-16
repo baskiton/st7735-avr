@@ -1,6 +1,6 @@
 {
     "name": "ST7735",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "This library is a display driver with an ST7735 controller and SPI communication that allows you to draw shapes, write text, and display images.",
     "keywords": "avr, baskiton, st7735, tft",
     "repository":
