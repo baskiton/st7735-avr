@@ -23,5 +23,22 @@
     "dependencies": {
         "defines-avr": "^1.0.0",
         "spi-avr": "^1.1.0"
-    }
+    },
+    "examples": [
+        {
+            "name": "Graphics Test",
+            "base": "examples/graphics_test",
+            "files": ["graphics_test.c"]
+        },
+        {
+            "name": "Std Out Test",
+            "base": "examples/stdout-test",
+            "files": ["stdout-test.c", "cmd.c"]
+        },
+        {
+            "name": "Text Test",
+            "base": "examples/text-test",
+            "files": ["text-test.c"]
+        }
+    ]
 }
