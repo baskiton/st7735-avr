@@ -21,7 +21,7 @@ void cmd_help(void) {
 }
 
 void cmd_cls(void) {
-    ST7735_fill_screen(tft_text_bg_color);
+    ST7735_fill_screen(color_565(0, 0, 168));
     ST7735_set_cursor(0, 0);
     ST7735_draw_fill_circle_Mich(63, -35, 100, color_565(92, 0, 0));
 }

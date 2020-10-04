@@ -1,5 +1,7 @@
 #include <avr/io.h>
+#include <avr/interrupt.h>
 #include <util/delay.h>
+
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -13,17 +15,27 @@
 #include "ST7735.h"
 #include "font.h"
 
-static uint8_t tft_cs;      // tft select pin number
-static uint8_t tft_a0;      // tft command/data pin number
-static uint8_t tft_rst;     // tft reset pin number
-static volatile uint8_t* tft_port;  // tft port address
+static struct st7735_dev {
+    struct spi_device_s spi_dev;
+    int16_t tft_cursor;     // current cursor position
+    int16_t tft_cursor_x; // top-left corner x-coord of cursor in pixels
+    int16_t tft_cursor_y; // top-left corner y-coord of cursor in pixels
+    uint16_t tft_text_color;     // text color
+    uint16_t tft_text_bg_color;  // background color
+    uint8_t tft_flags;
+} st7735;
 
-static int16_t tft_cursor;     // current cursor position
-static int16_t tft_cursor_x; // top-left corner x-coord of cursor in pixels
-static int16_t tft_cursor_y; // top-left corner y-coord of cursor in pixels
-static uint16_t tft_text_color;     // text color
-static uint16_t tft_text_bg_color;  // background color
-static uint8_t tft_flags;
+/* Select Display */
+#define tft_sel() (bit_clear(*(st7735.spi_dev.cs.port), st7735.spi_dev.cs.pin_num))
+
+/* Deselect Display */
+#define tft_desel() (bit_set(*(st7735.spi_dev.cs.port), st7735.spi_dev.cs.pin_num))
+
+/* Set Data mode */
+#define tft_data_mode() (bit_set(*(st7735.spi_dev.a0.port), st7735.spi_dev.a0.pin_num))
+
+/* Set Command mode */
+#define tft_command_mode() (bit_clear(*(st7735.spi_dev.a0.port), st7735.spi_dev.a0.pin_num))
 
 /*!
  * @brief Convert HSV-color to RGB
@@ -165,11 +177,11 @@ static inline uint8_t read8(uint8_t cmd) {
 
     tft_data_mode();
     spi_set_speed(TFT_READ_FREQ);
-    set_pin_mode(tft_port, SPI_MOSI, INPUT);
+    set_input(PORTB, SPI_MOSI);
     result = spi_read_8();
 
     spi_set_speed(TFT_WRITE_FREQ);
-    set_pin_mode(tft_port, SPI_MOSI, OUTPUT);
+    set_output(PORTB, SPI_MOSI);
 
     return result;
 }
@@ -269,7 +281,7 @@ static inline void write_line(int16_t x0, int16_t y0,
 static inline void write_Hline(uint8_t x0, uint8_t y0, uint8_t w, uint16_t color) {
     set_addr_window(x0, y0, w, 1);
     for (uint8_t i = 0; i < w; i++)
-        spi_write16_precheck(color);
+        spi_write16(color);
 }
 
 /*!
@@ -353,17 +365,17 @@ static inline void write_fill_circle(int16_t x_0, int16_t y_0,
  * @param num if >0 - increment; if <0 - decrement
  */
 static void cursor_upd(int8_t num) {
-    if (tft_flags & _BV(TFT_PIX_TEXT)) {
-        tft_cursor_x += num * (FONT_5X7_WIDTH + 1);
+    if (st7735.tft_flags & _BV(TFT_PIX_TEXT)) {
+        st7735.tft_cursor_x += num * (FONT_5X7_WIDTH + 1);
         return;
     }
-    if (((tft_cursor % TFT_CURSOR_MAX_C) < (TFT_CURSOR_MAX_C - 1)) ||
-         (tft_flags & _BV(TFT_WRAP_TEXT))) {
-        tft_cursor += num;
+    if (((st7735.tft_cursor % TFT_CURSOR_MAX_C) < (TFT_CURSOR_MAX_C - 1)) ||
+         (st7735.tft_flags & _BV(TFT_WRAP_TEXT))) {
+        st7735.tft_cursor += num;
     }
 
-    tft_cursor_x = (tft_cursor % TFT_CURSOR_MAX_C) * (FONT_5X7_WIDTH + 1);
-    tft_cursor_y = (tft_cursor / TFT_CURSOR_MAX_C) * (FONT_5X7_HEIGHT + 1);
+    st7735.tft_cursor_x = (st7735.tft_cursor % TFT_CURSOR_MAX_C) * (FONT_5X7_WIDTH + 1);
+    st7735.tft_cursor_y = (st7735.tft_cursor / TFT_CURSOR_MAX_C) * (FONT_5X7_HEIGHT + 1);
 }
 
 
@@ -381,7 +393,7 @@ uint32_t ST7735_read_info(uint8_t cmd) {
 
     tft_data_mode();
     spi_off();
-    set_pin_mode(tft_port, SPI_MOSI, INPUT);
+    set_input(PORTB, SPI_MOSI);
     spi_pulse();    // dummy clock
 
     spi_set_speed(TFT_READ_FREQ);
@@ -390,7 +402,7 @@ uint32_t ST7735_read_info(uint8_t cmd) {
 
     tft_desel();
     spi_set_speed(TFT_WRITE_FREQ);
-    set_pin_mode(tft_port, SPI_MOSI, OUTPUT);
+    set_output(PORTB, SPI_MOSI);
 
     return result;
 }
@@ -410,36 +422,48 @@ uint8_t ST7735_read8(uint8_t cmd) {
 
 /*!
  * @brief Initial display sequence
- * @param cs Chip Select (SS) pin number of \c port
- * @param a0 Data/Command (DC) pin number of \c port
- * @param rst Reset (RST) pin number of \c port
- * @param port Pointer to port (B, C or D)
+ * @param cs_num Chip Select (SS) pin number
+ * @param cs_port Chip Select port pointer
+ * @param a0_num Data/Command (DC) pin number
+ * @param a0_port Data/Command port pointer
+ * @param rst_num Reset (RST) pin number
+ * @param rst_port Reset port pointer
  */
-void ST7735_init(uint8_t cs, uint8_t a0, uint8_t rst, volatile uint8_t *port) {
-    tft_cs = cs;
-    tft_a0 = a0;
-    tft_rst = rst;
-    tft_port = port;
+void ST7735_init(uint8_t cs_num, volatile uint8_t *cs_port,
+                 uint8_t a0_num, volatile uint8_t *a0_port,
+                 uint8_t rst_num, volatile uint8_t *rst_port) {
+    uint8_t sreg = SREG;
 
-    set_output(*(port - 1), cs);
-    set_output(*(port - 1), a0);
-    set_output(*(port - 1), rst);
-    
+    cli();
+
+    st7735.spi_dev.cs.pin_num = cs_num;
+    st7735.spi_dev.cs.port = cs_port;
+    st7735.spi_dev.a0.pin_num = a0_num;
+    st7735.spi_dev.a0.port = a0_port;
+    st7735.spi_dev.rst.pin_num = rst_num;
+    st7735.spi_dev.rst.port = rst_port;
+    st7735.spi_dev.intr.pin_num = 0;
+    st7735.spi_dev.intr.port = NULL;
+
     tft_desel();        // deselect
     tft_data_mode();    // data mode
 
-    bit_set(*port, rst);    // toogle RST low to reset
+    set_output(*(st7735.spi_dev.cs.port - 1), st7735.spi_dev.cs.pin_num);
+    set_output(*(st7735.spi_dev.a0.port - 1), st7735.spi_dev.a0.pin_num);
+    set_output(*(st7735.spi_dev.rst.port - 1), st7735.spi_dev.rst.pin_num);
+    
+    bit_set(*(st7735.spi_dev.rst.port), st7735.spi_dev.rst.pin_num);    // toogle RST low to reset
     _delay_ms(120);
-    bit_clear(*port, rst);
+    bit_clear(*(st7735.spi_dev.rst.port), st7735.spi_dev.rst.pin_num);
     _delay_ms(20);
-    bit_set(*port, rst);
+    bit_set(*(st7735.spi_dev.rst.port), st7735.spi_dev.rst.pin_num);
     _delay_ms(150);
     
-    tft_cursor = 0;
-    tft_cursor_x = tft_cursor_y = 0;
-    tft_text_color = 0xFF;
-    tft_text_bg_color = 0x00;
-    tft_flags = 0;
+    st7735.tft_cursor = 0;
+    st7735.tft_cursor_x = st7735.tft_cursor_y = 0;
+    st7735.tft_text_color = 0xFF;
+    st7735.tft_text_bg_color = 0x00;
+    st7735.tft_flags = 0;
 
     fdev_setup_stream(&st7735_stream, ST7735_put_char, NULL, _FDEV_SETUP_WRITE);
 
@@ -477,6 +501,8 @@ void ST7735_init(uint8_t cs, uint8_t a0, uint8_t rst, volatile uint8_t *port) {
     write_cmd_data(ST7735_GAMSET, &data, 1);
     
     tft_desel();
+
+    SREG = sreg;
 }
 
 /*!
@@ -512,7 +538,7 @@ void ST7735_fill_screen(uint16_t rgb565) {
     set_addr_window(0, 0, TFT_WIDTH, TFT_HEIGHT);
 
     for (uint16_t i = 0; i < (TFT_WIDTH * TFT_HEIGHT); i++) {
-        spi_write16_precheck(rgb565);
+        spi_write16(rgb565);
     }
 
     tft_desel();
@@ -536,13 +562,13 @@ void ST7735_draw_HSV(void) {
         sat = 0.0F;
         for (uint8_t x = 0; x < (TFT_WIDTH / 2); x++) {
             rgb = hsv_to_rgb((uint16_t)hue, (uint8_t)sat, (uint8_t)val);
-            spi_write16_precheck(color_565(rgb.red, rgb.green, rgb.blue));
+            spi_write16(color_565(rgb.red, rgb.green, rgb.blue));
             sat += (0.78125F * 2);
         }
         sat = 100.0F;
         for (uint8_t x = 0; x < (TFT_WIDTH / 2); x++) {
             rgb = hsv_to_rgb((uint16_t)hue, (uint8_t)sat, (uint8_t)val);
-            spi_write16_precheck(color_565(rgb.red, rgb.green, rgb.blue));
+            spi_write16(color_565(rgb.red, rgb.green, rgb.blue));
             val -= (0.78125F * 2);
         }
         hue += 2.25F;
@@ -859,7 +885,7 @@ void ST7735_draw_fill_rect(int16_t x, int16_t y,
     tft_sel();
     set_addr_window(x, y, w, h);
     for (uint16_t i = 0; i < w * h; i++)
-        spi_write16_precheck(color);
+        spi_write16(color);
     tft_desel();
 }
 
@@ -1026,16 +1052,16 @@ void ST7735_draw_fill_triangle(int16_t a_x, int16_t a_y,
  * @param y Vertical cursor position (pix if pixel mode; column else)
  */
 void ST7735_set_cursor(int16_t x, int16_t y) {
-    if (tft_flags & _BV(TFT_PIX_TEXT)) {
+    if (st7735.tft_flags & _BV(TFT_PIX_TEXT)) {
         /* if pixel mode */
-        tft_cursor_x = x;
-        tft_cursor_y = y;
+        st7735.tft_cursor_x = x;
+        st7735.tft_cursor_y = y;
     } else {
         /* if char-pos mode */
-        tft_cursor = TFT_CURSOR_MAX_C * y + x;
+        st7735.tft_cursor = TFT_CURSOR_MAX_C * y + x;
         
-        tft_cursor_x = x * (FONT_5X7_WIDTH + 1);  // +1 is blank line
-        tft_cursor_y = y * (FONT_5X7_HEIGHT + 1);     // +1 is blank line
+        st7735.tft_cursor_x = x * (FONT_5X7_WIDTH + 1); // +1 is blank line
+        st7735.tft_cursor_y = y * (FONT_5X7_HEIGHT + 1);    // +1 is blank line
     }
 }
 
@@ -1044,7 +1070,7 @@ void ST7735_set_cursor(int16_t x, int16_t y) {
  * @return Cursor position in number of chars
  */
 int16_t ST7735_get_cursor(void) {
-    return tft_cursor;
+    return st7735.tft_cursor;
 }
 
 /*!
@@ -1052,7 +1078,7 @@ int16_t ST7735_get_cursor(void) {
  * @return X-coordinate of cursor
  */
 int16_t ST7735_get_cursor_x(void) {
-    return tft_cursor_x;
+    return st7735.tft_cursor_x;
 }
 
 /*!
@@ -1060,7 +1086,7 @@ int16_t ST7735_get_cursor_x(void) {
  * @return Y-coordinate of cursor
  */
 int16_t ST7735_get_cursor_y(void) {
-    return tft_cursor_y;
+    return st7735.tft_cursor_y;
 }
 
 /*!
@@ -1068,7 +1094,7 @@ int16_t ST7735_get_cursor_y(void) {
  * @param color 16-bit RGB565 color
  */
 void ST7735_set_text_color(uint16_t color) {
-    tft_text_color = color;
+    st7735.tft_text_color = color;
 }
 
 /*!
@@ -1076,7 +1102,7 @@ void ST7735_set_text_color(uint16_t color) {
  * @param color 16-bit RGB565 color
  */
 void ST7735_set_text_bg_color(uint16_t color) {
-    tft_text_bg_color = color;
+    st7735.tft_text_bg_color = color;
 }
 
 /*!
@@ -1086,7 +1112,7 @@ void ST7735_set_text_bg_color(uint16_t color) {
  * on the selected background color.
  */
 void ST7735_transp_text(bool mode) {
-    bit_write(tft_flags, TFT_TRANSP_TEXT, mode);
+    bit_write(st7735.tft_flags, TFT_TRANSP_TEXT, mode);
 }
 
 /*!
@@ -1094,7 +1120,7 @@ void ST7735_transp_text(bool mode) {
  * @param mode \c true or \c false
  */
 void ST7735_wrap_text(bool mode) {
-    bit_write(tft_flags, TFT_WRAP_TEXT, mode);
+    bit_write(st7735.tft_flags, TFT_WRAP_TEXT, mode);
 }
 
 /*!
@@ -1102,7 +1128,7 @@ void ST7735_wrap_text(bool mode) {
  * @param mode \c true or \c false
  */
 void ST7735_pix_text(bool mode) {
-    bit_write(tft_flags, TFT_PIX_TEXT, mode);
+    bit_write(st7735.tft_flags, TFT_PIX_TEXT, mode);
 }
 
 /*!
@@ -1110,7 +1136,7 @@ void ST7735_pix_text(bool mode) {
  * @param mode \c true for symbols or \c false for chars
  */
 void ST7735_symbol_text(bool mode) {
-    bit_write(tft_flags, TFT_SYM_TEXT, mode);
+    bit_write(st7735.tft_flags, TFT_SYM_TEXT, mode);
 }
 
 /*!
@@ -1119,10 +1145,10 @@ void ST7735_symbol_text(bool mode) {
  * @param stream Stream to sending
  */
 int ST7735_put_char(char c, FILE *stream) {
-    if ((tft_cursor_x >= TFT_WIDTH) ||
-        (tft_cursor_y >= TFT_HEIGHT) ||
-        ((tft_cursor_x + FONT_5X7_WIDTH + 1) < 0) ||
-        ((tft_cursor_y + FONT_5X7_HEIGHT + 1) < 0)) {
+    if ((st7735.tft_cursor_x >= TFT_WIDTH) ||
+        (st7735.tft_cursor_y >= TFT_HEIGHT) ||
+        ((st7735.tft_cursor_x + FONT_5X7_WIDTH + 1) < 0) ||
+        ((st7735.tft_cursor_y + FONT_5X7_HEIGHT + 1) < 0)) {
         /* checking if the given character is printed
            outside the screen boundaries */
         cursor_upd(1);
@@ -1130,7 +1156,7 @@ int ST7735_put_char(char c, FILE *stream) {
         return 0;
     }
     
-    if (!(tft_flags & _BV(TFT_SYM_TEXT))) {
+    if (!(st7735.tft_flags & _BV(TFT_SYM_TEXT))) {
         uint8_t tmp_val;
         switch (c) {
             case 0x00:  // ^@ \0 NULL
@@ -1150,12 +1176,12 @@ int ST7735_put_char(char c, FILE *stream) {
                     cursor_upd(-1);
                 return 0;
             case 0x09:  // ^I \t TAB
-                tmp_val = (tft_cursor % TFT_CURSOR_MAX_C) + 1;  // curr column
+                tmp_val = (st7735.tft_cursor % TFT_CURSOR_MAX_C) + 1;  // curr column
                 if ((tmp_val / 4) < 5)
                     cursor_upd(4 - (tmp_val % 4));
                 return 0;
             case 0x0A:  // ^J \n New Line
-                tmp_val = (tft_cursor % TFT_CURSOR_MAX_C) + 1;  // curr column
+                tmp_val = (st7735.tft_cursor % TFT_CURSOR_MAX_C) + 1;  // curr column
                 cursor_upd(TFT_CURSOR_MAX_C - (tmp_val % TFT_CURSOR_MAX_C) + 1);
                 return 0;
             case 0x0B:  // ^K \v
@@ -1193,11 +1219,11 @@ int ST7735_put_char(char c, FILE *stream) {
     
     tft_sel();
     
-    if (!(tft_flags & _BV(TFT_TRANSP_TEXT))) {
+    if (!(st7735.tft_flags & _BV(TFT_TRANSP_TEXT))) {
         /* if transparency is off, check and restrict
            the address window for the symbol */
-        int16_t tmp_x = tft_cursor_x;
-        int16_t tmp_y = tft_cursor_y;
+        int16_t tmp_x = st7735.tft_cursor_x;
+        int16_t tmp_y = st7735.tft_cursor_y;
         uint8_t tmp_w = FONT_5X7_WIDTH + 1;
         uint8_t tmp_h = FONT_5X7_HEIGHT + 1;
 
@@ -1221,24 +1247,24 @@ int ST7735_put_char(char c, FILE *stream) {
     for (uint8_t row = 0; row <= FONT_5X7_HEIGHT; row++) {
         tmp_ch = pgm_read_byte(&font5x7_cp437[(uint8_t)c][row]);
         for (uint8_t i = 0; i <= FONT_5X7_WIDTH; i++) {
-            if (((tft_cursor_x + i) < 0) || ((tft_cursor_x + i) >= TFT_WIDTH) ||
-                ((tft_cursor_y + row) < 0) || ((tft_cursor_y + row) >= TFT_HEIGHT)) {
+            if (((st7735.tft_cursor_x + i) < 0) || ((st7735.tft_cursor_x + i) >= TFT_WIDTH) ||
+                ((st7735.tft_cursor_y + row) < 0) || ((st7735.tft_cursor_y + row) >= TFT_HEIGHT)) {
                 /* skip if the pixel is outside the screen */
                 continue;
                 }
-            if (tft_flags & _BV(TFT_TRANSP_TEXT)) {
+            if (st7735.tft_flags & _BV(TFT_TRANSP_TEXT)) {
                 /* if transparent mode on */
                 if (tmp_ch & _BV(i)) {
-                    write_pixel(tft_cursor_x + i,
-                                tft_cursor_y + row,
-                                tft_text_color);
+                    write_pixel(st7735.tft_cursor_x + i,
+                                st7735.tft_cursor_y + row,
+                                st7735.tft_text_color);
                 }
             } else {
                 /* if transparent mode off */
                 if (tmp_ch & _BV(i))
-                    spi_write16_precheck(tft_text_color);
+                    spi_write16(st7735.tft_text_color);
                 else
-                    spi_write16_precheck(tft_text_bg_color);
+                    spi_write16(st7735.tft_text_bg_color);
             }
         }
     }
@@ -1253,6 +1279,5 @@ int ST7735_put_char(char c, FILE *stream) {
  * @brief Set ST7735 as std out
  */
 void ST7735_set_stdout() {
-    fdev_setup_stream(&st7735_stream, ST7735_put_char, NULL, _FDEV_SETUP_WRITE);
     stdout = &st7735_stream;
 }

@@ -9,8 +9,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include <defines.h>
-
 typedef struct {
     uint8_t red;
     uint8_t green;
@@ -120,25 +118,13 @@ FILE st7735_stream;
 #define TFT_PIX_TEXT 3U     // custom pixels position of text
 #define TFT_SYM_TEXT 4U     // symbols or char printed
 
-/* Select Display */
-#define tft_sel() (bit_clear(*tft_port, tft_cs))
 
-/* Deselect Display */
-#define tft_desel() (bit_set(*tft_port, tft_cs))
-
-/* Set Data mode */
-#define tft_data_mode() (bit_set(*tft_port, tft_a0))
-
-/* Set Command mode */
-#define tft_command_mode() (bit_clear(*tft_port, tft_a0))
-
-
-extern void ST7735_init(uint8_t cs, uint8_t a0, uint8_t rst, volatile uint8_t *port);
+extern void ST7735_init(uint8_t cs_num, volatile uint8_t *cs_port,
+                        uint8_t a0_num, volatile uint8_t *a0_port,
+                        uint8_t rst_num, volatile uint8_t *rst_port);
 
 extern void ST7735_invert_display(bool val);
 extern void ST7735_idle_mode(bool val);
-// extern uint32_t ST7735_read_info(uint8_t cmd);
-// extern uint8_t ST7735_read8(uint8_t cmd);
 extern void ST7735_fill_screen(uint16_t rgb565);
 extern void ST7735_draw_HSV(void);
 

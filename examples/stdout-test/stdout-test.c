@@ -30,9 +30,11 @@
 #include <ST7735.h>
 
 #define TFT_CS   PORTB2     /* pin10 */
+#define TFT_CS_PORT &PORTB
 #define TFT_A0   PORTB1     /* pin9 */
+#define TFT_A0_PORT &PORTB
 #define TFT_RST  PORTB0     /* pin8 */
-#define TFT_PORT PORTB
+#define TFT_RST_PORT &PORTB
 
 extern void cmd_help();
 extern void cmd_cls();
@@ -131,7 +133,7 @@ int main(void) {
     uart_set_stdin();   // as std input
 
     spi_init();
-    ST7735_init(TFT_CS, TFT_A0, TFT_RST, &TFT_PORT);
+    ST7735_init(TFT_CS, TFT_CS_PORT, TFT_A0, TFT_A0_PORT, TFT_RST, TFT_RST_PORT);
     ST7735_set_stdout();    // set display as std out
     ST7735_fill_screen(color_565(0, 0, 168));   // clear screen
 
