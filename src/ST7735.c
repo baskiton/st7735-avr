@@ -370,54 +370,19 @@ static void cursor_upd(int8_t num) {
         return;
     }
     if (((st7735.tft_cursor % TFT_CURSOR_MAX_C) < (TFT_CURSOR_MAX_C - 1)) ||
-         (st7735.tft_flags & _BV(TFT_WRAP_TEXT))) {
+        (st7735.tft_flags & _BV(TFT_WRAP_TEXT))) {
         st7735.tft_cursor += num;
+
+        if (st7735.tft_cursor >= (TFT_CURSOR_MAX_C * TFT_CURSOR_MAX_R)) {
+            st7735.tft_cursor -= ((st7735.tft_cursor / (TFT_CURSOR_MAX_C * TFT_CURSOR_MAX_R)) *
+                                  (TFT_CURSOR_MAX_C * TFT_CURSOR_MAX_R));
+            ST7735_draw_fill_rect(0, 0, TFT_WIDTH, (FONT_5X7_HEIGHT + 1) * 2,
+                                  st7735.tft_text_bg_color);
+        }
     }
 
     st7735.tft_cursor_x = (st7735.tft_cursor % TFT_CURSOR_MAX_C) * (FONT_5X7_WIDTH + 1);
     st7735.tft_cursor_y = (st7735.tft_cursor / TFT_CURSOR_MAX_C) * (FONT_5X7_HEIGHT + 1);
-}
-
-
-/*!
- * @brief Read 32-bit data from display. !!!Does not work correctly at the moment!!!
- * @param cmd RDDID or RDDST
- * @return 32-bit receive data
- */
-uint32_t ST7735_read_info(uint8_t cmd) {
-    uint32_t result;
-
-    tft_command_mode();
-    tft_sel();
-    spi_write(cmd);
-
-    tft_data_mode();
-    spi_off();
-    set_input(PORTB, SPI_MOSI);
-    spi_pulse();    // dummy clock
-
-    spi_set_speed(TFT_READ_FREQ);
-    spi_on();
-    result = spi_read_32();
-
-    tft_desel();
-    spi_set_speed(TFT_WRITE_FREQ);
-    set_output(PORTB, SPI_MOSI);
-
-    return result;
-}
-
-/*!
- * @brief Read 8-bit data from display. !!!Does not work correctly at the moment!!!
- * @param cmd Command to read
- * @return 8-bit receive data
- */
-uint8_t ST7735_read8(uint8_t cmd) {
-    uint8_t result;
-    tft_sel();
-    result = read8(cmd);
-    tft_desel();
-    return result;
 }
 
 /*!
@@ -1059,9 +1024,13 @@ void ST7735_set_cursor(int16_t x, int16_t y) {
     } else {
         /* if char-pos mode */
         st7735.tft_cursor = TFT_CURSOR_MAX_C * y + x;
+
+        if (st7735.tft_cursor > (TFT_CURSOR_MAX_C * TFT_CURSOR_MAX_R))
+            st7735.tft_cursor -= ((st7735.tft_cursor / (TFT_CURSOR_MAX_C * TFT_CURSOR_MAX_R)) *
+                                  (TFT_CURSOR_MAX_C * TFT_CURSOR_MAX_R));
         
-        st7735.tft_cursor_x = x * (FONT_5X7_WIDTH + 1); // +1 is blank line
-        st7735.tft_cursor_y = y * (FONT_5X7_HEIGHT + 1);    // +1 is blank line
+        st7735.tft_cursor_x = (st7735.tft_cursor % TFT_CURSOR_MAX_C) * (FONT_5X7_WIDTH + 1);
+        st7735.tft_cursor_y = (st7735.tft_cursor / TFT_CURSOR_MAX_C) * (FONT_5X7_HEIGHT + 1);
     }
 }
 
@@ -1151,64 +1120,63 @@ int ST7735_put_char(char c, FILE *stream) {
         ((st7735.tft_cursor_y + FONT_5X7_HEIGHT + 1) < 0)) {
         /* checking if the given character is printed
            outside the screen boundaries */
-        cursor_upd(1);
-        
-        return 0;
+        if (st7735.tft_flags & _BV(TFT_PIX_TEXT)) {
+            cursor_upd(1);
+            return 0;
+        }
     }
-    
     if (!(st7735.tft_flags & _BV(TFT_SYM_TEXT))) {
         uint8_t tmp_val;
         switch (c) {
             case 0x00:  // ^@ \0 NULL
                 return 0;
-            case 0x01:  // ^A
-            case 0x02:  // ^B
-            case 0x03:  // ^C
-            case 0x04:  // ^D
-            case 0x05:  // ^E
-            case 0x06:  // ^F
-            case 0x07:  // ^G \a
-                break;
+            // case 0x01:  // ^A
+            // case 0x02:  // ^B
+            // case 0x03:  // ^C
+            // case 0x04:  // ^D
+            // case 0x05:  // ^E
+            // case 0x06:  // ^F
+            // case 0x07:  // ^G \a
+            //     break;
             case 0x08:  // ^H \b BackSpase
-                if (stream->buf[stream->len] == '\t')
-                    cursor_upd(-4);
-                else
-                    cursor_upd(-1);
+                cursor_upd(-1);
                 return 0;
             case 0x09:  // ^I \t TAB
-                tmp_val = (st7735.tft_cursor % TFT_CURSOR_MAX_C) + 1;  // curr column
+                tmp_val = (st7735.tft_cursor % TFT_CURSOR_MAX_C);  // curr column
                 if ((tmp_val / 4) < 5)
                     cursor_upd(4 - (tmp_val % 4));
                 return 0;
             case 0x0A:  // ^J \n New Line
-                tmp_val = (st7735.tft_cursor % TFT_CURSOR_MAX_C) + 1;  // curr column
-                cursor_upd(TFT_CURSOR_MAX_C - (tmp_val % TFT_CURSOR_MAX_C) + 1);
+                tmp_val = (st7735.tft_cursor % TFT_CURSOR_MAX_C);  // curr column
+                cursor_upd(TFT_CURSOR_MAX_C - (tmp_val % TFT_CURSOR_MAX_C));
+                ST7735_draw_fill_rect(0, st7735.tft_cursor_y, TFT_WIDTH,
+                                      (FONT_5X7_HEIGHT + 1) * 2, st7735.tft_text_bg_color);
                 return 0;
-            case 0x0B:  // ^K \v
-            case 0x0C:  // ^L \f
-                break;
+            // case 0x0B:  // ^K \v
+            // case 0x0C:  // ^L \f
+            //     break;
             case 0x0D:  // ^M \r Carriage Return
                 return 0;
-            case 0x0E:  // ^N
-            case 0x0F:  // ^O
-            case 0x10:  // ^P
-            case 0x11:  // ^Q
-            case 0x12:  // ^R
-            case 0x13:  // ^S
-            case 0x14:  // ^T
-            case 0x15:  // ^U
-            case 0x16:  // ^V
-            case 0x17:  // ^W
-            case 0x18:  // ^X
-            case 0x19:  // ^Y
-            case 0x1A:  // ^Z
-            case 0x1B:  // ^[ \e ESCAPE
-            case 0x1C:  /* ^\ */
-            case 0x1D:  // ^]
-            case 0x1E:  // ^^
-            case 0x1F:  // ^_
-            case 0x7F:  // ^?
-                break;
+            // case 0x0E:  // ^N
+            // case 0x0F:  // ^O
+            // case 0x10:  // ^P
+            // case 0x11:  // ^Q
+            // case 0x12:  // ^R
+            // case 0x13:  // ^S
+            // case 0x14:  // ^T
+            // case 0x15:  // ^U
+            // case 0x16:  // ^V
+            // case 0x17:  // ^W
+            // case 0x18:  // ^X
+            // case 0x19:  // ^Y
+            // case 0x1A:  // ^Z
+            // case 0x1B:  // ^[ \e ESCAPE
+            // case 0x1C:  /* ^\ */
+            // case 0x1D:  // ^]
+            // case 0x1E:  // ^^
+            // case 0x1F:  // ^_
+            // case 0x7F:  // ^?
+            //     break;
             
             default:
                 break;
