@@ -21,7 +21,7 @@ typedef struct {
     uint8_t val;
 } color_hsv;
 
-extern color_rgb hsv_to_rgb(uint16_t hue, uint8_t sat, uint8_t val);
+color_rgb hsv_to_rgb(uint16_t hue, uint8_t sat, uint8_t val);
 
 FILE st7735_stream;
 
@@ -119,41 +119,41 @@ FILE st7735_stream;
 #define TFT_SYM_TEXT 4U     // symbols or char printed
 
 
-extern void ST7735_init(uint8_t cs_num, volatile uint8_t *cs_port,
-                        uint8_t a0_num, volatile uint8_t *a0_port,
-                        uint8_t rst_num, volatile uint8_t *rst_port);
+void ST7735_init(uint8_t cs_num, volatile uint8_t *cs_port,
+                 uint8_t a0_num, volatile uint8_t *a0_port,
+                 uint8_t rst_num, volatile uint8_t *rst_port);
 
-extern void ST7735_invert_display(bool val);
-extern void ST7735_idle_mode(bool val);
-extern void ST7735_fill_screen(uint16_t rgb565);
-extern void ST7735_draw_HSV(void);
+void ST7735_invert_display(bool val);
+void ST7735_idle_mode(bool val);
+void ST7735_fill_screen(uint16_t rgb565);
+void ST7735_draw_HSV(void);
 
-extern void ST7735_draw_pixel(int16_t x, int16_t y, uint16_t color);
-extern void ST7735_draw_line(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color);
-extern void ST7735_draw_Hline(int16_t x, int16_t y, int16_t w, uint16_t color);
-extern void ST7735_draw_Vline(int16_t x, int16_t y, int16_t h, uint16_t color);
-extern void ST7735_draw_circle_Bres(int16_t x0, int16_t y0, int16_t radius, uint16_t color);
-extern void ST7735_draw_circle_Mich(int16_t x0, int16_t y0, int16_t radius, uint16_t color);
-extern void ST7735_draw_fill_circle_Bres(int16_t x0, int16_t y0, int16_t radius, uint16_t color);
-extern void ST7735_draw_fill_circle_Mich(int16_t x0, int16_t y0, int16_t radius, uint16_t color);
-extern void ST7735_draw_rect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color);
-extern void ST7735_draw_fill_rect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color);
-extern void ST7735_draw_triangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2, int16_t y2, uint16_t color);
-extern void ST7735_draw_fill_triangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2, int16_t y2, uint16_t color);
+void ST7735_draw_pixel(int16_t x, int16_t y, uint16_t color);
+void ST7735_draw_line(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color);
+void ST7735_draw_Hline(int16_t x, int16_t y, int16_t w, uint16_t color);
+void ST7735_draw_Vline(int16_t x, int16_t y, int16_t h, uint16_t color);
+void ST7735_draw_circle_Bres(int16_t x0, int16_t y0, int16_t radius, uint16_t color);
+void ST7735_draw_circle_Mich(int16_t x0, int16_t y0, int16_t radius, uint16_t color);
+void ST7735_draw_fill_circle_Bres(int16_t x0, int16_t y0, int16_t radius, uint16_t color);
+void ST7735_draw_fill_circle_Mich(int16_t x0, int16_t y0, int16_t radius, uint16_t color);
+void ST7735_draw_rect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color);
+void ST7735_draw_fill_rect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color);
+void ST7735_draw_triangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2, int16_t y2, uint16_t color);
+void ST7735_draw_fill_triangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2, int16_t y2, uint16_t color);
 
-extern void ST7735_set_cursor(int16_t x, int16_t y);
-extern int16_t ST7735_get_cursor(void);
-extern int16_t ST7735_get_cursor_x(void);
-extern int16_t ST7735_get_cursor_y(void);
+void ST7735_set_cursor(int16_t x, int16_t y);
+int16_t ST7735_get_cursor(void);
+int16_t ST7735_get_cursor_x(void);
+int16_t ST7735_get_cursor_y(void);
 
-extern void ST7735_set_text_color(uint16_t color);
-extern void ST7735_set_text_bg_color(uint16_t color);
-extern void ST7735_transp_text(bool mode);
-extern void ST7735_wrap_text(bool mode);
-extern void ST7735_pix_text(bool mode);
-extern void ST7735_symbol_text(bool mode);
+void ST7735_set_text_color(uint16_t color);
+void ST7735_set_text_bg_color(uint16_t color);
+void ST7735_transp_text(bool mode);
+void ST7735_wrap_text(bool mode);
+void ST7735_pix_text(bool mode);
+void ST7735_symbol_text(bool mode);
 
-extern int ST7735_put_char(char c, FILE *stream);
-extern void ST7735_set_stdout();
+int ST7735_put_char(char c, FILE *stream);
+void ST7735_set_stdout();
 
 #endif  /* !ST7735_H */
